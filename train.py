@@ -3,6 +3,8 @@ Usage:
 Training:
 python train.py --config-name=train_diffusion_lowdim_workspace
 """
+from diffusion_policy.dataset.stack_cube_dataset import StackCubeLowdimDataset
+
 
 import sys
 # use line-buffering for both stdout and stderr

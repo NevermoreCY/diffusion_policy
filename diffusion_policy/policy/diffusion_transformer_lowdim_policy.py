@@ -177,6 +177,12 @@ class DiffusionTransformerLowdimPolicy(BaseLowdimPolicy):
         nbatch = self.normalizer.normalize(batch)
         obs = nbatch['obs']
         action = nbatch['action']
+        # print("Normalized obs shape:", obs.shape)
+        # print("Normalized action shape:", action.shape)
+        # 重新调整形状
+        # B = obs.shape[0] // self.horizon
+        # obs = obs.reshape(B, self.horizon, -1)
+        # action = action.reshape(B, self.horizon, -1)
 
         # handle different ways of passing observation
         cond = None

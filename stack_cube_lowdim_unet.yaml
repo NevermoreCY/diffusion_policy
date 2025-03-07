@@ -1,0 +1,155 @@
+# 使用扩散UNet进行低维数据训练的配置文件
+_target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace.TrainDiffusionUnetLowdimWorkspace
+
+# 基础参数
+task_name: stack_cube_lowdim_unet_7500_r1
+exp_name: stack_cube_lowdim_unet_7500_r1
+obs_dim: 48  # 您的观测维度
+action_dim: 7  # 您的动作维度
+horizon: 16
+n_obs_steps: 2
+n_action_steps: 8
+n_latency_steps: 0
+past_action_visible: False
+keypoint_visible_rate: 1.0
+
+# UNet条件设置
+obs_as_local_cond: False    
+obs_as_global_cond: True  # 使用全局条件
+pred_action_steps_only: False
+
+policy:
+  _target_: diffusion_policy.policy.diffusion_unet_lowdim_policy.DiffusionUnetLowdimPolicy
+  
+  model:
+    _target_: diffusion_policy.model.diffusion.conditional_unet1d.ConditionalUnet1D
+    input_dim: "${eval: ${action_dim} if ${obs_as_local_cond} or ${obs_as_global_cond} else ${obs_dim} + ${action_dim}}"
+    local_cond_dim: "${eval: ${obs_dim} if ${obs_as_local_cond} else None}"
+    global_cond_dim: "${eval: ${obs_dim}*${n_obs_steps} if ${obs_as_global_cond} else None}"
+    diffusion_step_embed_dim: 256
+    down_dims: [256, 512, 1024]
+    kernel_size: 5
+    n_groups: 8
+    cond_predict_scale: True
+  
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    num_train_timesteps: 100
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    clip_sample: True
+    prediction_type: epsilon
+    variance_type: fixed_small
+
+  horizon: ${horizon}
+  obs_dim: ${obs_dim}
+  action_dim: ${action_dim}
+  n_action_steps: ${n_action_steps}
+  n_obs_steps: ${n_obs_steps}
+  num_inference_steps: 100
+  obs_as_local_cond: ${obs_as_local_cond}
+  obs_as_global_cond: ${obs_as_global_cond}
+  pred_action_steps_only: ${pred_action_steps_only}
+
+# 数据集配置
+task:
+  action_dim: ${action_dim}
+  dataset:
+    _target_: diffusion_policy.dataset.stack_cube_dataset.StackCubeLowdimDataset
+    dataset_path: data/generated_gamepad_7500_0211.hdf5
+    horizon: ${horizon}
+    pad_before: 1
+    pad_after: 0
+    seed: 42
+    val_ratio: 0.02
+  env_runner:
+    _target_: diffusion_policy.env_runner.pusht_keypoints_runner.PushTKeypointsRunner
+    keypoint_visible_rate: ${keypoint_visible_rate}
+    n_train: 6
+    n_train_vis: 2
+    train_start_seed: 0
+    n_test: 50
+    n_test_vis: 4
+    legacy_test: true
+    test_start_seed: 100000
+    max_steps: 300
+    n_obs_steps: ${n_obs_steps}
+    n_action_steps: ${n_action_steps}
+    n_latency_steps: ${n_latency_steps}
+    fps: 10
+    agent_keypoints: false
+    past_action: ${past_action_visible}
+    n_envs: null
+  keypoint_dim: 2
+  name: stack_cube_lowdim_unet_7500
+  obs_dim: 48
+
+# EMA配置
+ema:
+  _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
+  update_after_step: 0
+  inv_gamma: 1.0
+  power: 0.75
+  min_value: 0.0
+  max_value: 0.9999
+
+# 优化器配置
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-6
+
+# 训练配置
+training:
+  device: "cuda:0"
+  seed: 42
+  debug: false
+  resume: true
+  lr_scheduler: cosine
+  lr_warmup_steps: 500
+  num_epochs: 20
+  gradient_accumulate_every: 1
+  use_ema: true
+  rollout_every: 1000000  # 禁用rollout评估
+  checkpoint_every: 1
+  val_every: 1
+  sample_every: 5
+  max_train_steps: null
+  max_val_steps: null
+  tqdm_interval_sec: 1.0
+
+# 数据加载器配置
+dataloader:
+  batch_size: 1024  
+  num_workers: 1
+  shuffle: true
+  pin_memory: true
+  persistent_workers: false
+
+val_dataloader:
+  batch_size: 1024
+  num_workers: 1
+  shuffle: false
+  pin_memory: true
+  persistent_workers: false
+
+# 日志配置
+logging:
+  project: diffusion_policy_debug
+  resume: true
+  mode: online
+  name: ${now:%Y.%m.%d-%H.%M.%S}_${task_name}
+  tags: ["unet", "${task_name}", "${exp_name}"]
+
+# 检查点配置
+checkpoint:
+  topk:
+    monitor_key: val_loss
+    mode: min
+    k: 5
+    format_str: 'epoch={epoch:04d}-val_loss={val_loss:.3f}.ckpt'
+  save_last_ckpt: true
+  save_last_snapshot: false 

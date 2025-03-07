@@ -1,0 +1,156 @@
+# 使用扩散Transformer进行低维数据训练的配置文件
+_target_: diffusion_policy.workspace.train_diffusion_transformer_lowdim_workspace.TrainDiffusionTransformerLowdimWorkspace
+exp_name: stack_cube_lowdim_experiment
+
+checkpoint:
+  save_last_ckpt: true
+  save_last_snapshot: false
+  topk:
+    format_str: epoch={epoch:04d}-val_loss={val_loss:.3f}.ckpt
+    k: 5
+    mode: min
+    monitor_key: val_loss
+
+dataloader:
+  batch_size: 256
+  num_workers: 1
+  persistent_workers: false
+  pin_memory: true
+  shuffle: true
+
+ema:
+  _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
+  inv_gamma: 1.0
+  max_value: 0.9999
+  min_value: 0.0
+  power: 0.75
+  update_after_step: 0
+
+horizon: 15
+keypoint_visible_rate: 1.0
+
+logging:
+  group: null
+  id: null
+  mode: online
+  name: lr0.0002_obs5_action5_emb512_head8_layer12_horizon15
+  project: diffusion_policy_experiments
+  resume: true
+  tags:
+    - stack_cube
+    - lowdim
+
+multi_run:
+  run_dir: data/outputs/stack_cube_lowdim_v4
+  wandb_name_base: lr0.0002_obs5_action5_emb512_head8_layer12_horizon15
+
+n_action_steps: 5
+n_latency_steps: 0
+n_obs_steps: 10
+name: train_diffusion_transformer_lowdim
+obs_as_cond: true
+obs_dim: 48
+
+optimizer:
+  betas:
+    - 0.9
+    - 0.95
+  learning_rate: 0.0002
+  weight_decay: 0.001
+
+past_action_visible: false
+pred_action_steps_only: false
+
+policy:
+  _target_: diffusion_policy.policy.diffusion_transformer_lowdim_policy.DiffusionTransformerLowdimPolicy
+  action_dim: 7
+  horizon: 15
+  model:
+    _target_: diffusion_policy.model.diffusion.transformer_for_diffusion.TransformerForDiffusion
+    causal_attn: true
+    cond_dim: 48
+    horizon: 15
+    input_dim: 7
+    n_cond_layers: 0
+    n_emb:  512
+    n_head:  8
+    n_layer:  12
+    n_obs_steps: 10
+    obs_as_cond: true
+    output_dim: 7
+    p_drop_attn: 0.3
+    p_drop_emb: 0.0
+    time_as_cond: true
+  n_action_steps: 5
+  n_obs_steps: 10
+  noise_scheduler:
+    _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
+    beta_end: 0.02
+    beta_schedule: squaredcos_cap_v2
+    beta_start: 0.0001
+    clip_sample: true
+    num_train_timesteps: 100
+    prediction_type: epsilon
+    variance_type: fixed_small
+  num_inference_steps: 100
+  obs_as_cond: true
+  obs_dim: 48
+  pred_action_steps_only: false
+
+task:
+  action_dim: 7
+  dataset:
+    _target_: diffusion_policy.dataset.stack_cube_dataset.StackCubeLowdimDataset
+    dataset_path: data/generated_gamepad_7500_0211.hdf5
+    horizon: ${horizon}
+    pad_before: 1
+    pad_after: 0
+    seed: 42
+    val_ratio: 0.02
+  env_runner:
+    _target_: diffusion_policy.env_runner.pusht_keypoints_runner.PushTKeypointsRunner
+    keypoint_visible_rate: ${keypoint_visible_rate}
+    n_train: 6
+    n_train_vis: 2
+    train_start_seed: 0
+    n_test: 50
+    n_test_vis: 4
+    legacy_test: true
+    test_start_seed: 100000
+    max_steps: 300
+    n_obs_steps: ${n_obs_steps}
+    n_action_steps: ${n_action_steps}
+    n_latency_steps: ${n_latency_steps}
+    fps: 10
+    agent_keypoints: false
+    past_action: ${past_action_visible}
+    n_envs: null
+  keypoint_dim: 2
+  name: stack_cube_lowdim_7500
+  obs_dim: 48
+task_name: stack_cube_lowdim_7500
+
+training:
+  checkpoint_every: 10
+  debug: false
+  device: cuda:0
+  gradient_accumulate_every: 1
+  lr_scheduler: cosine
+  lr_warmup_steps: 1000
+  max_train_steps: null
+  max_val_steps: null
+  num_epochs: 250
+  resume: true
+  rollout_every: 1000000   # 设置成极大数值，以基本禁用环境评估 rollout
+  sample_every: 5 
+  seed: 42
+  tqdm_interval_sec: 1.0
+  use_ema: true
+  val_every: 1
+
+val_dataloader:
+  batch_size: 256
+  num_workers: 1
+  persistent_workers: false
+  pin_memory: true
+  shuffle: false 
